@@ -125,6 +125,130 @@ const questions = [
         answer: [47.8336, 4.5846],
         name: "Saint-Loup-de-Varennes, France",
         image: "images/first_photograph.jpg",
+// Global variables
+let marker = null;
+let correctMarker = null;
+let line = null;
+let currentQuestion = 0;
+let allGuesses = [];
+let allMarkers = [];
+let allLines = [];
+let map, correctLocation, canGuess = true, totalScore = 0, roundsPlayed = 0;
+let currentGuess = null;
+let mapClickEnabled = true; // Added this line
+
+// Timer variables
+let startTime;
+let timerInterval;
+let elapsedTime = 0; // Track elapsed time in milliseconds
+let timeLeft = 120000; // 2 minutes in milliseconds
+const initialTime = 120000;
+
+// Initial theme setup
+const savedTheme = localStorage.getItem('theme') || 'light';
+document.documentElement.setAttribute('data-theme', savedTheme);
+
+function startTimer() {
+    startTime = Date.now();
+    timerInterval = setInterval(updateTimer, 1000);
+}
+
+function stopTimer() {
+    clearInterval(timerInterval);
+}
+
+function updateTimer() {
+    const currentTime = Date.now();
+    elapsedTime = currentTime - startTime;
+    timeLeft = initialTime - elapsedTime;
+
+    if (timeLeft <= 0) {
+        stopTimer();
+        timeLeft = 0;
+        handleTimeout();
+    }
+
+    const formattedTime = formatTime(timeLeft);
+    document.getElementById('timer').textContent = formattedTime;
+}
+
+function formatTime(milliseconds) {
+    const totalSeconds = Math.floor(milliseconds / 1000);
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+}
+
+function handleTimeout() {
+    if (canGuess) {
+        canGuess = false;
+        const correctAnswer = questions[currentQuestion].answer;
+        let userGuess = currentGuess;
+        let distance = null; // Initialize distance to null
+
+        if (!userGuess && marker) {
+            userGuess = marker.getLatLng();
+            distance = calculateDistance(userGuess.lat, userGuess.lng, correctAnswer[0], correctAnswer[1]);
+        } else if (!userGuess) {
+            userGuess = {lat: correctAnswer[0], lng: correctAnswer[1]};
+            document.getElementById('distance').textContent = `-`;
+        } else if (userGuess){
+            distance = calculateDistance(userGuess.lat, userGuess.lng, correctAnswer[0], correctAnswer[1]);
+        }
+
+        allGuesses.push(userGuess);
+
+        const nextButton = document.querySelector('.next-button');
+        nextButton.style.display = 'block';
+        document.getElementById('submit-guess').style.display = 'none';
+
+        if (currentQuestion === questions.length - 1) {
+            nextButton.textContent = 'See Results';
+        } else {
+            nextButton.textContent = 'Next Question';
+        }
+
+        let score = 0;
+
+        if (distance !== null && marker) {
+            score = Math.max(0, Math.round(4000 * (1 - distance/20000)));
+            document.getElementById('distance').textContent = `Distance: ${Math.round(distance)} km`;
+        }
+
+        totalScore += score;
+        document.getElementById('score').textContent = `Score: ${totalScore}`;
+        showGuessAndCorrectLocation(userGuess, L.latLng(correctAnswer[0], correctAnswer[1]));
+    }
+}
+
+// Questions array
+const questions = [
+    {
+        question: "Where did the first manned powered flight take place?",
+        answer: [35.2320, -75.6211],
+        name: "Kitty Hawk, North Carolina, USA",
+        image: "images/wright_flyer.jpg",
+        info: "On December 17, 1903, the Wright brothers achieved the first manned powered flight in Kitty Hawk with their Wright Flyer."
+    },
+    {
+        question: "Where was the first artificial satellite launched into space?",
+        answer: [45.9200, 63.3420],
+        name: "Baikonur Cosmodrome, Kazakhstan",
+        image: "images/sputnik_launch.jpg",
+        info: "On October 4, 1957, the Soviet Union launched Sputnik 1 from Baikonur Cosmodrome, marking the start of the space age."
+    },
+    {
+        question: "Where was the first successful cloning of a mammal achieved?",
+        answer: [56.4907, -3.1747],
+        name: "Roslin Institute, Scotland",
+        image: "images/dolly.jpg",
+        info: "In 1996, scientists at the Roslin Institute in Scotland successfully cloned Dolly the sheep, the first mammal cloned from an adult cell."
+    },
+    {
+        question: "Where was the first photograph ever taken?",
+        answer: [47.8336, 4.5846],
+        name: "Saint-Loup-de-Varennes, France",
+        image: "images/first_photograph.jpg",
         info: "In 1826, Joseph Nicéphore Niépce captured the world's first permanent photograph, 'View from the Window at Le Gras,' in Saint-Loup-de-Varennes."
     },
     {
@@ -164,6 +288,7 @@ const correctIcon = L.divIcon({
     iconAnchor: [25, 25]
 });
 
+// Initialize the map with zoom functionality from the second code
 function initializeMap() {
     map = L.map('map', {
         minZoom: 2,
@@ -174,13 +299,25 @@ function initializeMap() {
         wheelDebounceTime: 150,
         wheelPxPerZoomLevel: 120
     });
+
     L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
         subdomains: 'abcd',
         maxZoom: 20,
     }).addTo(map);
+
+    // Enable scroll wheel zoom
     map.scrollWheelZoom.enable();
+
+    // Add zoom controls
+    L.control.zoom({
+        position: 'topright'
+    }).addTo(map);
+
+    // Handle map clicks for guesses
     map.on('click', handleGuess);
+
+    // Update pin size and line on zoom
     let zoomTimeout;
     map.on('zoomend', () => {
         clearTimeout(zoomTimeout);
@@ -195,6 +332,7 @@ function initializeMap() {
     });
 }
 
+// Rest of the first code remains unchanged...
 function calculateDistance(lat1, lon1, lat2, lon2) {
     const R = 6371;
     const dLat = (lat2 - lat1) * Math.PI / 180;
